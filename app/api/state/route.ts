@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Redis } from "@upstash/redis";
+import { createClient } from "redis";
 
-const redis = Redis.fromEnv();
 const KEY = "ielts-state-v1";
 
 function pinOk(req: NextRequest) {
@@ -10,12 +9,23 @@ function pinOk(req: NextRequest) {
   return expected.length > 0 && pin === expected;
 }
 
+async function getClient() {
+  const client = createClient({ url: process.env.REDIS_URL });
+  await client.connect();
+  return client;
+}
+
 export async function GET(req: NextRequest) {
   if (!pinOk(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  const data = await redis.get(KEY);
-  return NextResponse.json({ data: data || null });
+  const client = await getClient();
+  try {
+    const raw = await client.get(KEY);
+    return NextResponse.json({ data: raw ? JSON.parse(raw) : null });
+  } finally {
+    await client.quit();
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -23,6 +33,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const body = await req.json();
-  await redis.set(KEY, body);
-  return NextResponse.json({ ok: true });
+  const client = await getClient();
+  try {
+    await client.set(KEY, JSON.stringify(body));
+    return NextResponse.json({ ok: true });
+  } finally {
+    await client.quit();
+  }
 }

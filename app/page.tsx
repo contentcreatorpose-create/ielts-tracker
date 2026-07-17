@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -38,10 +38,7 @@ function emptyBookProgress(): BookProgress {
 }
 
 function dateStr(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return d.toISOString().slice(0, 10);
 }
 function fmtLabel(d: Date) {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
@@ -206,7 +203,7 @@ export default function Home() {
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && tryAuth(pin)}
-            placeholder="••••••"
+            placeholder="â€¢â€¢â€¢â€¢â€¢â€¢"
           />
           <div className="btn primary" onClick={() => tryAuth(pin)}>
             {loading ? "Memuat..." : "Masuk"}
@@ -224,7 +221,7 @@ export default function Home() {
           <div className="ticket-main">
             <div className="ticket-eyebrow">Tiket Latihan Harian</div>
             <div className="ticket-title serif">IELTS Practice Log</div>
-            <div className="ticket-sub">Cambridge Book 1–17 &amp; ieltstrainingonline.com</div>
+            <div className="ticket-sub">Cambridge Book 1â€“17 &amp; ieltstrainingonline.com</div>
             <div className="ticket-fields">
               <div className="field">
                 <label>Target Band</label>
@@ -236,7 +233,7 @@ export default function Home() {
               </div>
             </div>
             <div className="sync-note">
-              <span className="sync-dot"></span>Sinkron lintas device — progres sama di HP &amp; laptop
+              <span className="sync-dot"></span>Sinkron lintas device â€” progres sama di HP &amp; laptop
             </div>
           </div>
           <div className="ticket-stub">
@@ -270,10 +267,10 @@ export default function Home() {
 
         <div className="tabs">
           <div className={`tab ${tab === "cal" ? "active" : ""}`} onClick={() => setTab("cal")}>
-            📅 Kalender Harian
+            ðŸ“… Kalender Harian
           </div>
           <div className={`tab ${tab === "books" ? "active" : ""}`} onClick={() => setTab("books")}>
-            📚 Progress Buku 1–17
+            ðŸ“š Progress Buku 1â€“17
           </div>
         </div>
 
@@ -341,8 +338,8 @@ export default function Home() {
                   const e = state.logs[ds];
                   const d = new Date(ds + "T00:00:00");
                   let src = "";
-                  if (e.source === "Cambridge Book" && e.bookNum) src = `Cambridge Book ${e.bookNum} — Test ${e.testNum}. `;
-                  else if (e.source) src = `${e.source}${e.testInfo ? " — " + e.testInfo : ""}. `;
+                  if (e.source === "Cambridge Book" && e.bookNum) src = `Cambridge Book ${e.bookNum} â€” Test ${e.testNum}. `;
+                  else if (e.source) src = `${e.source}${e.testInfo ? " â€” " + e.testInfo : ""}. `;
                   return (
                     <div key={ds} className="log-row">
                       <div className="log-date">{d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}</div>
@@ -381,7 +378,7 @@ export default function Home() {
               <div className="bar-track">
                 <div className="bar-fill" style={{ width: `${stats.skillPct}%` }} />
               </div>
-              <div className="missing-note">⚠️ Book 6 belum ada — cari dulu biar urutan 1–17 lengkap.</div>
+              <div className="missing-note">âš ï¸ Book 6 belum ada â€” cari dulu biar urutan 1â€“17 lengkap.</div>
             </div>
             {BOOKS.map((b) => {
               const key = String(b);
@@ -404,7 +401,7 @@ export default function Home() {
                       </div>
                       <div className="book-pct mono">{pct}%</div>
                       <div className="chevron" style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
-                        ▾
+                        â–¾
                       </div>
                     </div>
                   </div>
@@ -443,12 +440,12 @@ export default function Home() {
           </a>
           <div className="res-card" style={{ cursor: "default" }}>
             <div className="k">Fisik / PDF</div>
-            <div className="t">Cambridge Book 1–17</div>
+            <div className="t">Cambridge Book 1â€“17</div>
             <div className="d">16 buku sudah di-scan, tinggal cari Book 6</div>
           </div>
         </div>
 
-        <div className="foot-note">Data tersimpan di Vercel KV — bisa dibuka dari HP atau laptop mana pun, asal masuk pakai PIN yang sama.</div>
+        <div className="foot-note">Data tersimpan di Vercel KV â€” bisa dibuka dari HP atau laptop mana pun, asal masuk pakai PIN yang sama.</div>
       </div>
 
       {openDate && (

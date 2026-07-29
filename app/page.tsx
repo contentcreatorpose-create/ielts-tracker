@@ -1,665 +1,138 @@
-"use client";
-
-import { useEffect, useMemo, useState } from "react";
-
-const START = new Date("2026-07-16T00:00:00");
-const END = new Date("2026-09-30T00:00:00");
-const SKILLS = ["R", "L", "W", "S"] as const;
-type Skill = (typeof SKILLS)[number];
-const SKILL_NAMES: Record<Skill, string> = { R: "Reading", L: "Listening", W: "Writing", S: "Speaking" };
-const BOOKS = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]; // 6 missing
-const TESTS_PER_BOOK = 4;
-
-type LogEntry = {
-  done: boolean;
-  skills: Skill[];
-  source: string;
-  bookNum?: string;
-  testNum?: string;
-  testInfo?: string;
-  notes?: string;
-};
-type BookProgress = Record<string, Record<string, Record<Skill, boolean>>>;
-type AppState = {
-  targetBand: string;
-  logs: Record<string, LogEntry[]>;
-  bookProgress: BookProgress;
-};
-
-// data lama nyimpen 1 objek per tanggal, bukan array — ini biar tetap kebaca
-function normalizeLogs(raw: any): Record<string, LogEntry[]> {
-  const out: Record<string, LogEntry[]> = {};
-  if (!raw) return out;
-  Object.keys(raw).forEach((ds) => {
-    const v = raw[ds];
-    if (Array.isArray(v)) out[ds] = v;
-    else if (v) out[ds] = [v];
-  });
-  return out;
+:root{
+  --paper:#EFEEE3; --card:#FAF9F2; --ink:#1B2A4A; --ink-soft:#5B6780;
+  --highlight:#F0A202; --correct:#2F6846; --correct-soft:#DCE9DF;
+  --stamp:#B0413E; --line:#D8D3C2; --line-strong:#B9B29B;
+  --r:#B0413E; --l:#2F6846; --w:#1B2A4A; --s:#8A5A1B;
 }
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--paper);}
+body{color:var(--ink);font-family:'IBM Plex Sans',sans-serif;}
 
-function emptyBookProgress(): BookProgress {
-  const bp: BookProgress = {};
-  BOOKS.forEach((b) => {
-    bp[String(b)] = {};
-    for (let t = 1; t <= TESTS_PER_BOOK; t++) {
-      bp[String(b)][String(t)] = { R: false, L: false, W: false, S: false };
-    }
-  });
-  return bp;
+.ielts-root{
+  min-height:100vh; padding:24px 16px 60px;
+  background-image:linear-gradient(var(--line) 1px, transparent 1px);
+  background-size:100% 28px;
 }
+.wrap{max-width:760px;margin:0 auto;}
+.serif{font-family:'Lora',serif;}
+.mono{font-family:'IBM Plex Mono',monospace;}
 
-function dateStr(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-function fmtLabel(d: Date) {
-  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
-}
+/* Ticket header */
+.ticket{background:var(--card);border:1.5px solid var(--ink);border-radius:14px;display:flex;position:relative;overflow:hidden;box-shadow:0 2px 0 var(--line-strong);}
+.ticket-main{flex:1;padding:20px 20px 18px;}
+.ticket-eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);font-weight:600;}
+.ticket-title{font-size:24px;font-weight:700;margin:4px 0 2px;line-height:1.15;}
+.ticket-sub{font-size:12.5px;color:var(--ink-soft);}
+.ticket-fields{display:flex;gap:20px;margin-top:14px;flex-wrap:wrap;}
+.field label{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:3px;}
+.field input{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:var(--ink);background:transparent;border:none;border-bottom:1.5px dashed var(--line-strong);width:70px;padding:2px 0;}
+.field input:focus{outline:none;border-color:var(--ink);}
+.ticket-stub{width:140px;border-left:2px dashed var(--line-strong);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 8px;background:repeating-linear-gradient(135deg, rgba(27,42,74,0.03) 0 8px, transparent 8px 16px);}
+.stub-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);text-align:center;}
+.stub-days{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:32px;color:var(--stamp);line-height:1;margin:4px 0;}
+.stub-unit{font-size:10px;color:var(--ink-soft);letter-spacing:.08em;}
+.stub-date{font-size:10px;color:var(--ink-soft);margin-top:8px;text-align:center;}
 
-export default function Home() {
-  const [pin, setPin] = useState("");
-  const [authedPin, setAuthedPin] = useState<string | null>(null);
-  const [gateError, setGateError] = useState("");
-  const [loading, setLoading] = useState(false);
+.sync-note{display:flex;align-items:center;gap:8px;background:var(--correct-soft);border:1px solid var(--correct);color:var(--correct);border-radius:9px;padding:8px 12px;font-size:11.5px;margin-top:12px;}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--correct);flex-shrink:0;}
 
-  const [state, setState] = useState<AppState>({
-    targetBand: "8.5",
-    logs: {},
-    bookProgress: emptyBookProgress(),
-  });
-  const [tab, setTab] = useState<"cal" | "books">("cal");
-  const [openDate, setOpenDate] = useState<string | null>(null);
-  const [openBooks, setOpenBooks] = useState<Record<string, boolean>>({});
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:14px;}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 8px;text-align:center;}
+.stat-num{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:19px;color:var(--ink);}
+.stat-label{font-size:9.5px;color:var(--ink-soft);letter-spacing:.02em;margin-top:2px;}
 
-  // restore pin from sessionStorage so refresh doesn't force re-entry
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? sessionStorage.getItem("app-pin") : null;
-    if (saved) tryAuth(saved);
-  }, []);
+.tabs{display:flex;gap:6px;margin-top:22px;border-bottom:1.5px solid var(--line-strong);}
+.tab{padding:9px 14px;font-size:13px;font-weight:600;color:var(--ink-soft);cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-1.5px;}
+.tab.active{color:var(--ink);border-color:var(--stamp);}
 
-  async function tryAuth(pinValue: string) {
-    setLoading(true);
-    setGateError("");
-    try {
-      const res = await fetch("/api/state", { headers: { "x-app-pin": pinValue } });
-      if (res.status === 401) {
-        setGateError("PIN salah, coba lagi.");
-        setLoading(false);
-        return;
-      }
-      const json = await res.json();
-      if (json.data) {
-        setState({
-          targetBand: json.data.targetBand || "8.5",
-          logs: normalizeLogs(json.data.logs),
-          bookProgress: json.data.bookProgress || emptyBookProgress(),
-        });
-      }
-      sessionStorage.setItem("app-pin", pinValue);
-      setAuthedPin(pinValue);
-    } catch (e) {
-      setGateError("Gagal konek ke server, coba lagi.");
-    }
-    setLoading(false);
-  }
+.section-head{display:flex;align-items:baseline;justify-content:space-between;margin:18px 0 10px;}
+.section-title{font-size:15px;font-weight:700;letter-spacing:.02em;}
+.section-note{font-size:11px;color:var(--ink-soft);}
 
-  async function persist(next: AppState) {
-    setState(next);
-    if (!authedPin) return;
-    try {
-      await fetch("/api/state", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-app-pin": authedPin },
-        body: JSON.stringify(next),
-      });
-    } catch (e) {
-      // silent fail; local state still updated
-    }
-  }
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-soft);}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;}
 
-  const daysLeft = useMemo(() => {
-    const today = new Date();
-    const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    return Math.max(Math.round((END.getTime() - t.getTime()) / 86400000), 0);
-  }, []);
+.cal-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;}
+.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;}
+.cal-weekdays span{font-size:10px;text-align:center;color:var(--ink-soft);letter-spacing:.05em;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+.cal-cell{aspect-ratio:1;border:1.5px solid var(--line-strong);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);cursor:pointer;background:var(--paper);position:relative;transition:transform .1s ease;}
+.cal-cell:hover{transform:scale(1.06);}
+.cal-cell.empty{visibility:hidden;cursor:default;}
+.cal-cell.today{border-color:var(--stamp);border-width:2px;color:var(--stamp);font-weight:700;}
+.cal-cell.past{opacity:.55;}
+.cal-cell.done{background:var(--ink);color:var(--paper);border-color:var(--ink);font-weight:600;}
+.cal-cell.done.today{background:var(--stamp);border-color:var(--stamp);color:#fff;}
+.skill-dots{position:absolute;bottom:-3px;display:flex;gap:1px;}
+.skill-dots i{width:4px;height:4px;border-radius:50%;display:block;}
 
-  const today = useMemo(() => {
-    const t = new Date();
-    return new Date(t.getFullYear(), t.getMonth(), t.getDate());
-  }, []);
+.panel-overlay{position:fixed;inset:0;background:rgba(27,42,74,.35);display:flex;align-items:flex-end;justify-content:center;z-index:50;}
+@media(min-width:640px){.panel-overlay{align-items:center;}}
+.panel{background:var(--card);width:100%;max-width:420px;border-radius:16px 16px 0 0;border:1px solid var(--line);padding:20px;max-height:85vh;overflow-y:auto;}
+@media(min-width:640px){.panel{border-radius:16px;}}
+.panel-title{font-size:16px;font-weight:700;font-family:'Lora',serif;}
+.panel-sub{font-size:11px;color:var(--ink-soft);margin-top:2px;margin-bottom:14px;}
+.chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.chip{border:1.5px solid var(--line-strong);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;background:var(--paper);color:var(--ink-soft);}
+.chip.on{color:#fff;border-color:transparent;}
+.chip.on.R{background:var(--r);} .chip.on.L{background:var(--l);}
+.chip.on.W{background:var(--w);} .chip.on.S{background:var(--s);}
+.panel label.f{display:block;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin:12px 0 5px;}
+.panel select, .panel textarea, .panel input[type=text]{width:100%;border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;background:var(--paper);color:var(--ink);}
+.row2{display:flex;gap:8px;}
+.row2 > div{flex:1;}
+.panel textarea{min-height:56px;resize:vertical;}
+.panel-actions{display:flex;gap:8px;margin-top:16px;}
+.btn{flex:1;padding:11px;border-radius:9px;font-weight:600;font-size:13px;cursor:pointer;border:1.5px solid var(--ink);text-align:center;}
+.btn.primary{background:var(--ink);color:#fff;} .btn.ghost{background:transparent;color:var(--ink);}
+.btn.danger{border-color:var(--stamp);color:var(--stamp);}
 
-  const calendarDays = useMemo(() => {
-    const days: (Date | null)[] = [];
-    const startPad = START.getDay();
-    for (let i = 0; i < startPad; i++) days.push(null);
-    let d = new Date(START);
-    while (d <= END) {
-      days.push(new Date(d));
-      d.setDate(d.getDate() + 1);
-    }
-    return days;
-  }, []);
+.log-row{display:flex;gap:12px;padding:11px 0;border-bottom:1px dashed var(--line);font-size:12.5px;align-items:flex-start;}
+.log-row:last-child{border-bottom:none;}
+.log-date{font-family:'IBM Plex Mono',monospace;font-weight:600;width:60px;flex-shrink:0;color:var(--ink-soft);}
+.log-body{flex:1;}
+.log-skills{display:flex;gap:4px;margin-bottom:2px;}
+.log-skills span{font-size:9px;font-weight:700;color:#fff;border-radius:4px;padding:1px 5px;}
+.log-note{color:var(--ink-soft);white-space:pre-line;}
+.empty-state{font-size:12.5px;color:var(--ink-soft);padding:14px 0;text-align:center;}
 
-  const stats = useMemo(() => {
-    let done = 0,
-      total = 0;
-    let d = new Date(START);
-    while (d <= END) {
-      total++;
-      const ds = dateStr(d);
-      if (state.logs[ds]?.length) done++;
-      d.setDate(d.getDate() + 1);
-    }
-    let streak = 0;
-    let cursor = new Date(today);
-    while (state.logs[dateStr(cursor)]?.length) {
-      streak++;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    let skillDone = 0,
-      skillTotal = 0,
-      booksComplete = 0;
-    BOOKS.forEach((b) => {
-      const book = state.bookProgress[String(b)];
-      let bookDone = 0;
-      for (let t = 1; t <= TESTS_PER_BOOK; t++) {
-        SKILLS.forEach((k) => {
-          skillTotal++;
-          if (book?.[String(t)]?.[k]) {
-            skillDone++;
-            bookDone++;
-          }
-        });
-      }
-      if (bookDone === TESTS_PER_BOOK * SKILLS.length) booksComplete++;
-    });
-    const skillPct = skillTotal ? Math.round((skillDone / skillTotal) * 100) : 0;
-    return { done, total, streak, booksComplete, skillPct };
-  }, [state, today]);
+.res-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.res-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px;text-decoration:none;color:var(--ink);display:block;}
+.res-card .k{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);}
+.res-card .t{font-weight:600;font-size:13px;margin-top:3px;}
+.res-card .d{font-size:11px;color:var(--ink-soft);margin-top:3px;line-height:1.4;}
+.foot-note{font-size:11px;color:var(--ink-soft);text-align:center;margin-top:26px;line-height:1.6;}
 
-  function addLogEntry(ds: string, entry: LogEntry) {
-    const existing = state.logs[ds] || [];
-    const next = { ...state, logs: { ...state.logs, [ds]: [...existing, entry] } };
-    if (entry.source === "Cambridge Book" && entry.bookNum && entry.testNum) {
-      const bp = JSON.parse(JSON.stringify(next.bookProgress)) as BookProgress;
-      if (!bp[entry.bookNum]) bp[entry.bookNum] = {};
-      if (!bp[entry.bookNum][entry.testNum]) bp[entry.bookNum][entry.testNum] = { R: false, L: false, W: false, S: false };
-      entry.skills.forEach((k) => (bp[entry.bookNum!][entry.testNum!][k] = true));
-      next.bookProgress = bp;
-    }
-    persist(next);
-  }
-  function deleteLogEntry(ds: string, index: number) {
-    const existing = state.logs[ds] || [];
-    const nextEntries = existing.filter((_, i) => i !== index);
-    const nextLogs = { ...state.logs };
-    if (nextEntries.length) nextLogs[ds] = nextEntries;
-    else delete nextLogs[ds];
-    persist({ ...state, logs: nextLogs });
-  }
-  function clearLog(ds: string) {
-    const nextLogs = { ...state.logs };
-    delete nextLogs[ds];
-    persist({ ...state, logs: nextLogs });
-  }
-  function toggleSkillCell(book: number, test: number, k: Skill) {
-    const bp = JSON.parse(JSON.stringify(state.bookProgress)) as BookProgress;
-    bp[String(book)][String(test)][k] = !bp[String(book)][String(test)][k];
-    persist({ ...state, bookProgress: bp });
-  }
-  function setTargetBand(v: string) {
-    persist({ ...state, targetBand: v });
-  }
+.book-overview{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;}
+.book-overview-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+.bar-track{height:8px;background:var(--paper);border:1px solid var(--line-strong);border-radius:6px;overflow:hidden;}
+.bar-fill{height:100%;background:var(--ink);}
+.missing-note{font-size:11px;color:var(--stamp);margin-top:8px;}
 
-  if (!authedPin) {
-    return (
-      <div className="gate-wrap">
-        <div className="gate-card">
-          <div className="ticket-eyebrow">Akses Pribadi</div>
-          <div className="ticket-title serif">IELTS Practice Tracker</div>
-          <div className="ticket-sub">Masukkan PIN buat masuk</div>
-          <input
-            type="password"
-            inputMode="numeric"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && tryAuth(pin)}
-            placeholder="••••••"
-          />
-          <div className="btn primary" onClick={() => tryAuth(pin)}>
-            {loading ? "Memuat..." : "Masuk"}
-          </div>
-          {gateError && <div className="gate-error">{gateError}</div>}
-        </div>
-      </div>
-    );
-  }
+.book-card{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden;}
+.book-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;}
+.book-head-left{display:flex;align-items:center;gap:10px;}
+.book-num{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px;width:26px;}
+.book-name{font-weight:600;font-size:13.5px;}
+.book-mini-bar{width:70px;height:6px;background:var(--paper);border:1px solid var(--line-strong);border-radius:4px;overflow:hidden;}
+.book-mini-fill{height:100%;background:var(--correct);}
+.book-pct{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);width:32px;text-align:right;}
+.chevron{font-size:11px;color:var(--ink-soft);transition:transform .15s;display:inline-block;}
+.book-body{display:none;padding:0 14px 14px;border-top:1px dashed var(--line);}
+.book-body.open{display:block;}
+.test-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line);}
+.test-row:last-child{border-bottom:none;}
+.test-label{font-size:12px;font-weight:600;width:52px;flex-shrink:0;color:var(--ink-soft);}
+.skill-toggle{display:flex;gap:6px;}
+.skill-toggle .st{width:26px;height:26px;border-radius:7px;border:1.5px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink-soft);background:var(--paper);}
+.skill-toggle .st.on.R{background:var(--r);color:#fff;border-color:transparent;}
+.skill-toggle .st.on.L{background:var(--l);color:#fff;border-color:transparent;}
+.skill-toggle .st.on.W{background:var(--w);color:#fff;border-color:transparent;}
+.skill-toggle .st.on.S{background:var(--s);color:#fff;border-color:transparent;}
 
-  return (
-    <div className="ielts-root">
-      <div className="wrap">
-        <div className="ticket">
-          <div className="ticket-main">
-            <div className="ticket-eyebrow">Tiket Latihan Harian</div>
-            <div className="ticket-title serif">IELTS Practice Log</div>
-            <div className="ticket-sub">Cambridge Book 1–17 &amp; ieltstrainingonline.com</div>
-            <div className="ticket-fields">
-              <div className="field">
-                <label>Target Band</label>
-                <input type="text" value={state.targetBand} onChange={(e) => setTargetBand(e.target.value)} maxLength={4} />
-              </div>
-              <div className="field">
-                <label>Deadline</label>
-                <input type="text" value="30 Sep 2026" disabled style={{ color: "var(--ink-soft)", cursor: "default" }} />
-              </div>
-            </div>
-            <div className="sync-note">
-              <span className="sync-dot"></span>Sinkron lintas device — progres sama di HP &amp; laptop
-            </div>
-          </div>
-          <div className="ticket-stub">
-            <div className="stub-label">Hari Tersisa</div>
-            <div className="stub-days mono">{daysLeft}</div>
-            <div className="stub-unit">HARI</div>
-            <div className="stub-date">{fmtLabel(today)}</div>
-          </div>
-        </div>
-
-        <div className="stats">
-          <div className="stat">
-            <div className="stat-num">{stats.done}</div>
-            <div className="stat-label">Hari Practice</div>
-          </div>
-          <div className="stat">
-            <div className="stat-num">{stats.streak}</div>
-            <div className="stat-label">Streak</div>
-          </div>
-          <div className="stat">
-            <div className="stat-num">
-              {stats.booksComplete}/{BOOKS.length}
-            </div>
-            <div className="stat-label">Buku Selesai</div>
-          </div>
-          <div className="stat">
-            <div className="stat-num">{stats.skillPct}%</div>
-            <div className="stat-label">Progres Buku</div>
-          </div>
-        </div>
-
-        <div className="tabs">
-          <div className={`tab ${tab === "cal" ? "active" : ""}`} onClick={() => setTab("cal")}>
-            📅 Kalender Harian
-          </div>
-          <div className={`tab ${tab === "books" ? "active" : ""}`} onClick={() => setTab("books")}>
-            📚 Progress Buku 1–17
-          </div>
-        </div>
-
-        {tab === "cal" && (
-          <>
-            <div className="section-head">
-              <div className="section-title serif">Kalender Latihan</div>
-              <div className="section-note">Klik tanggal untuk isi log</div>
-            </div>
-            <div className="legend">
-              <div className="legend-item">
-                <span className="dot" style={{ background: "var(--r)" }}></span>Reading
-              </div>
-              <div className="legend-item">
-                <span className="dot" style={{ background: "var(--l)" }}></span>Listening
-              </div>
-              <div className="legend-item">
-                <span className="dot" style={{ background: "var(--w)" }}></span>Writing
-              </div>
-              <div className="legend-item">
-                <span className="dot" style={{ background: "var(--s)" }}></span>Speaking
-              </div>
-            </div>
-            <div className="cal-card">
-              <div className="cal-weekdays">
-                {["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"].map((d) => (
-                  <span key={d}>{d}</span>
-                ))}
-              </div>
-              <div className="cal-grid">
-                {calendarDays.map((d, i) => {
-                  if (!d) return <div key={i} className="cal-cell empty" />;
-                  const ds = dateStr(d);
-                  const entries = state.logs[ds] || [];
-                  const done = entries.length > 0;
-                  const daySkills = Array.from(new Set(entries.flatMap((e) => e.skills)));
-                  const isToday = ds === dateStr(today);
-                  const isPast = d < today;
-                  const cls = ["cal-cell", isToday && "today", !isToday && isPast && "past", done && "done"]
-                    .filter(Boolean)
-                    .join(" ");
-                  return (
-                    <div key={ds} className={cls} onClick={() => setOpenDate(ds)}>
-                      {d.getDate()}
-                      {daySkills.length ? (
-                        <div className="skill-dots">
-                          {daySkills.map((k, idx) => (
-                            <i key={idx} style={{ background: done ? "#fff" : `var(--${k.toLowerCase()})` }} />
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="section-head">
-              <div className="section-title serif">Log Terbaru</div>
-            </div>
-           <div className="cal-card" style={{ padding: "6px 16px", maxHeight: 420, overflowY: "auto" }}>
-  {Object.keys(state.logs)
-    .filter((ds) => state.logs[ds]?.length)
-    .sort((a, b) => b.localeCompare(a))
-    .map((ds) => {
-                  const d = new Date(ds + "T00:00:00");
-                  return (
-                    <div key={ds} className="log-row">
-                      <div className="log-date">{d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}</div>
-                      <div className="log-body">
-                        {state.logs[ds].map((e, idx) => {
-                          let src = "";
-                          if (e.source === "Cambridge Book" && e.bookNum) src = `Cambridge Book ${e.bookNum} — Test ${e.testNum}. `;
-                          else if (e.source) src = `${e.source}${e.testInfo ? " — " + e.testInfo : ""}. `;
-                          return (
-                            <div key={idx} style={{ marginBottom: idx < state.logs[ds].length - 1 ? 6 : 0 }}>
-                              <div className="log-skills">
-                                {e.skills.map((k) => (
-                                  <span key={k} style={{ background: `var(--${k.toLowerCase()})` }}>
-                                    {k}
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="log-note">
-                                {src}
-                                {e.notes}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              {Object.keys(state.logs).filter((ds) => state.logs[ds]?.length).length === 0 && (
-                <div className="empty-state">Belum ada log. Klik tanggal di kalender untuk mulai.</div>
-              )}
-            </div>
-          </>
-        )}
-
-        {tab === "books" && (
-          <>
-            <div className="book-overview">
-              <div className="book-overview-top">
-                <div className="section-title serif">Progress Keseluruhan</div>
-                <div className="mono" style={{ fontWeight: 700, fontSize: 20 }}>
-                  {stats.skillPct}%
-                </div>
-              </div>
-              <div className="bar-track">
-                <div className="bar-fill" style={{ width: `${stats.skillPct}%` }} />
-              </div>
-              <div className="missing-note">⚠️ Book 6 belum ada — cari dulu biar urutan 1–17 lengkap.</div>
-            </div>
-            {BOOKS.map((b) => {
-              const key = String(b);
-              const book = state.bookProgress[key] || {};
-              let bookDone = 0;
-              const total = TESTS_PER_BOOK * SKILLS.length;
-              for (let t = 1; t <= TESTS_PER_BOOK; t++) SKILLS.forEach((k) => book[String(t)]?.[k] && bookDone++);
-              const pct = Math.round((bookDone / total) * 100);
-              const isOpen = !!openBooks[key];
-              return (
-                <div key={b} className="book-card">
-                  <div className="book-head" onClick={() => setOpenBooks({ ...openBooks, [key]: !isOpen })}>
-                    <div className="book-head-left">
-                      <div className="book-num mono">#{b}</div>
-                      <div className="book-name">Cambridge IELTS {b}</div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div className="book-mini-bar">
-                        <div className="book-mini-fill" style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className="book-pct mono">{pct}%</div>
-                      <div className="chevron" style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
-                        ▾
-                      </div>
-                    </div>
-                  </div>
-                  <div className={`book-body ${isOpen ? "open" : ""}`}>
-                    {Array.from({ length: TESTS_PER_BOOK }, (_, i) => i + 1).map((t) => (
-                      <div key={t} className="test-row">
-                        <div className="test-label">Test {t}</div>
-                        <div className="skill-toggle">
-                          {SKILLS.map((k) => (
-                            <div
-                              key={k}
-                              className={`st ${book[String(t)]?.[k] ? "on " + k : ""}`}
-                              onClick={() => toggleSkillCell(b, t, k)}
-                            >
-                              {k}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </>
-        )}
-
-        <div className="section-head">
-          <div className="section-title serif">Sumber Latihan</div>
-        </div>
-        <div className="res-grid">
-          <a className="res-card" href="https://ieltstrainingonline.com/cambridge-practice-tests-for-ielts-reading/" target="_blank" rel="noopener noreferrer">
-            <div className="k">Online</div>
-            <div className="t">ieltstrainingonline.com</div>
-            <div className="d">Cambridge-style reading practice tests + jawaban</div>
-          </a>
-          <div className="res-card" style={{ cursor: "default" }}>
-            <div className="k">Fisik / PDF</div>
-            <div className="t">Cambridge Book 1–17</div>
-            <div className="d">16 buku sudah di-scan, tinggal cari Book 6</div>
-          </div>
-        </div>
-
-        <div className="foot-note">Data tersimpan di Vercel KV — bisa dibuka dari HP atau laptop mana pun, asal masuk pakai PIN yang sama.</div>
-      </div>
-
-      {openDate && (
-        <DayPanel
-          ds={openDate}
-          entries={state.logs[openDate] || []}
-          onClose={() => setOpenDate(null)}
-          onAdd={(entry) => addLogEntry(openDate, entry)}
-          onDeleteEntry={(idx) => deleteLogEntry(openDate, idx)}
-          onClearAll={() => {
-            clearLog(openDate);
-            setOpenDate(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function DayPanel({
-  ds,
-  entries,
-  onClose,
-  onAdd,
-  onDeleteEntry,
-  onClearAll,
-}: {
-  ds: string;
-  entries: LogEntry[];
-  onClose: () => void;
-  onAdd: (e: LogEntry) => void;
-  onDeleteEntry: (idx: number) => void;
-  onClearAll: () => void;
-}) {
-  const d = new Date(ds + "T00:00:00");
-  const [skills, setSkills] = useState<Skill[]>([]);
-  const [source, setSource] = useState("");
-  const [bookNum, setBookNum] = useState(String(BOOKS[0]));
-  const [testNum, setTestNum] = useState("1");
-  const [testInfo, setTestInfo] = useState("");
-  const [notes, setNotes] = useState("");
-
-  function toggleSkill(k: Skill) {
-    setSkills((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
-  }
-
-  function resetForm() {
-    setSkills([]);
-    setSource("");
-    setBookNum(String(BOOKS[0]));
-    setTestNum("1");
-    setTestInfo("");
-    setNotes("");
-  }
-
-  return (
-    <div className="panel-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="panel">
-        <div className="panel-title">{fmtLabel(d)}</div>
-        <div className="panel-sub">{entries.length ? `${entries.length} sesi tercatat hari ini` : "Catat sesi latihan hari ini"}</div>
-
-        {entries.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-            {entries.map((e, idx) => {
-              let src = "";
-              if (e.source === "Cambridge Book" && e.bookNum) src = `Cambridge Book ${e.bookNum} — Test ${e.testNum}`;
-              else if (e.source) src = `${e.source}${e.testInfo ? " — " + e.testInfo : ""}`;
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    border: "1px solid var(--line)",
-                    borderRadius: 8,
-                    padding: "8px 10px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    gap: 8,
-                  }}
-                >
-                  <div>
-                    <div className="log-skills" style={{ marginBottom: 4 }}>
-                      {e.skills.map((k) => (
-                        <span key={k} style={{ background: `var(--${k.toLowerCase()})` }}>
-                          {k}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="log-note">
-                      {src}
-                      {e.notes ? (src ? " — " : "") + e.notes : ""}
-                    </div>
-                  </div>
-                  <div className="btn danger" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => onDeleteEntry(idx)}>
-                    Hapus
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <label className="f">{entries.length ? "Tambah sesi lain" : "Skill"}</label>
-        <div className="chip-row">
-          {SKILLS.map((k) => (
-            <div key={k} className={`chip ${skills.includes(k) ? "on " + k : ""}`} onClick={() => toggleSkill(k)}>
-              {SKILL_NAMES[k]}
-            </div>
-          ))}
-        </div>
-
-        <label className="f">Sumber</label>
-        <select value={source} onChange={(e) => setSource(e.target.value)}>
-          <option value="">Pilih sumber</option>
-          <option value="Cambridge Book">Cambridge Book (fisik/PDF)</option>
-          <option value="ieltstrainingonline.com">ieltstrainingonline.com</option>
-          <option value="Lainnya">Lainnya</option>
-        </select>
-
-        {source === "Cambridge Book" && (
-          <div className="row2">
-            <div>
-              <label className="f">Buku</label>
-              <select value={bookNum} onChange={(e) => setBookNum(e.target.value)}>
-                {BOOKS.map((b) => (
-                  <option key={b} value={b}>
-                    Book {b}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="f">Test</label>
-              <select value={testNum} onChange={(e) => setTestNum(e.target.value)}>
-                {Array.from({ length: TESTS_PER_BOOK }, (_, i) => i + 1).map((t) => (
-                  <option key={t} value={t}>
-                    Test {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-        {(source === "ieltstrainingonline.com" || source === "Lainnya") && (
-          <>
-            <label className="f">Detail</label>
-            <input type="text" value={testInfo} onChange={(e) => setTestInfo(e.target.value)} placeholder="cth: Reading Test 05" />
-          </>
-        )}
-
-        <label className="f">Catatan singkat</label>
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Skor, kesulitan, kosakata baru, dll." />
-
-        <div className="panel-actions">
-          <div className="btn ghost" onClick={onClose}>
-            Tutup
-          </div>
-          <div
-            className="btn primary"
-            onClick={() => {
-              if (!skills.length) return;
-              onAdd({
-                done: true,
-                skills,
-                source,
-                bookNum: source === "Cambridge Book" ? bookNum : undefined,
-                testNum: source === "Cambridge Book" ? testNum : undefined,
-                testInfo,
-                notes,
-              });
-              resetForm();
-            }}
-          >
-            {entries.length ? "Simpan sesi ini" : "Simpan & Tandai Selesai"}
-          </div>
-        </div>
-        {entries.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div className="btn danger" style={{ borderStyle: "dashed" }} onClick={onClearAll}>
-              Hapus semua log hari ini
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+/* PIN gate */
+.gate-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.gate-card{background:var(--card);border:1.5px solid var(--ink);border-radius:14px;padding:28px 24px;max-width:320px;width:100%;text-align:center;}
+.gate-card input{width:100%;text-align:center;letter-spacing:.3em;font-family:'IBM Plex Mono',monospace;font-size:20px;border:1px solid var(--line-strong);border-radius:8px;padding:10px;margin:14px 0;background:var(--paper);color:var(--ink);}
+.gate-error{color:var(--stamp);font-size:12px;margin-top:4px;}

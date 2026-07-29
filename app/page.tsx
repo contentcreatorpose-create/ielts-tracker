@@ -22,9 +22,21 @@ type LogEntry = {
 type BookProgress = Record<string, Record<string, Record<Skill, boolean>>>;
 type AppState = {
   targetBand: string;
-  logs: Record<string, LogEntry>;
+  logs: Record<string, LogEntry[]>;
   bookProgress: BookProgress;
 };
+
+// data lama nyimpen 1 objek per tanggal, bukan array — ini biar tetap kebaca
+function normalizeLogs(raw: any): Record<string, LogEntry[]> {
+  const out: Record<string, LogEntry[]> = {};
+  if (!raw) return out;
+  Object.keys(raw).forEach((ds) => {
+    const v = raw[ds];
+    if (Array.isArray(v)) out[ds] = v;
+    else if (v) out[ds] = [v];
+  });
+  return out;
+}
 
 function emptyBookProgress(): BookProgress {
   const bp: BookProgress = {};
@@ -82,7 +94,7 @@ export default function Home() {
       if (json.data) {
         setState({
           targetBand: json.data.targetBand || "8.5",
-          logs: json.data.logs || {},
+          logs: normalizeLogs(json.data.logs),
           bookProgress: json.data.bookProgress || emptyBookProgress(),
         });
       }
@@ -138,12 +150,12 @@ export default function Home() {
     while (d <= END) {
       total++;
       const ds = dateStr(d);
-      if (state.logs[ds]?.done) done++;
+      if (state.logs[ds]?.length) done++;
       d.setDate(d.getDate() + 1);
     }
     let streak = 0;
     let cursor = new Date(today);
-    while (state.logs[dateStr(cursor)]?.done) {
+    while (state.logs[dateStr(cursor)]?.length) {
       streak++;
       cursor.setDate(cursor.getDate() - 1);
     }
@@ -168,8 +180,9 @@ export default function Home() {
     return { done, total, streak, booksComplete, skillPct };
   }, [state, today]);
 
-  function updateLog(ds: string, entry: LogEntry) {
-    const next = { ...state, logs: { ...state.logs, [ds]: entry } };
+  function addLogEntry(ds: string, entry: LogEntry) {
+    const existing = state.logs[ds] || [];
+    const next = { ...state, logs: { ...state.logs, [ds]: [...existing, entry] } };
     if (entry.source === "Cambridge Book" && entry.bookNum && entry.testNum) {
       const bp = JSON.parse(JSON.stringify(next.bookProgress)) as BookProgress;
       if (!bp[entry.bookNum]) bp[entry.bookNum] = {};
@@ -178,6 +191,14 @@ export default function Home() {
       next.bookProgress = bp;
     }
     persist(next);
+  }
+  function deleteLogEntry(ds: string, index: number) {
+    const existing = state.logs[ds] || [];
+    const nextEntries = existing.filter((_, i) => i !== index);
+    const nextLogs = { ...state.logs };
+    if (nextEntries.length) nextLogs[ds] = nextEntries;
+    else delete nextLogs[ds];
+    persist({ ...state, logs: nextLogs });
   }
   function clearLog(ds: string) {
     const nextLogs = { ...state.logs };
@@ -307,19 +328,21 @@ export default function Home() {
                 {calendarDays.map((d, i) => {
                   if (!d) return <div key={i} className="cal-cell empty" />;
                   const ds = dateStr(d);
-                  const entry = state.logs[ds];
+                  const entries = state.logs[ds] || [];
+                  const done = entries.length > 0;
+                  const daySkills = Array.from(new Set(entries.flatMap((e) => e.skills)));
                   const isToday = ds === dateStr(today);
                   const isPast = d < today;
-                  const cls = ["cal-cell", isToday && "today", !isToday && isPast && "past", entry?.done && "done"]
+                  const cls = ["cal-cell", isToday && "today", !isToday && isPast && "past", done && "done"]
                     .filter(Boolean)
                     .join(" ");
                   return (
                     <div key={ds} className={cls} onClick={() => setOpenDate(ds)}>
                       {d.getDate()}
-                      {entry?.skills?.length ? (
+                      {daySkills.length ? (
                         <div className="skill-dots">
-                          {entry.skills.map((k, idx) => (
-                            <i key={idx} style={{ background: entry.done ? "#fff" : `var(--${k.toLowerCase()})` }} />
+                          {daySkills.map((k, idx) => (
+                            <i key={idx} style={{ background: done ? "#fff" : `var(--${k.toLowerCase()})` }} />
                           ))}
                         </div>
                       ) : null}
@@ -334,35 +357,40 @@ export default function Home() {
             </div>
             <div className="cal-card" style={{ padding: "6px 16px" }}>
               {Object.keys(state.logs)
-                .filter((ds) => state.logs[ds].done)
+                .filter((ds) => state.logs[ds]?.length)
                 .sort((a, b) => b.localeCompare(a))
                 .slice(0, 6)
                 .map((ds) => {
-                  const e = state.logs[ds];
                   const d = new Date(ds + "T00:00:00");
-                  let src = "";
-                  if (e.source === "Cambridge Book" && e.bookNum) src = `Cambridge Book ${e.bookNum} — Test ${e.testNum}. `;
-                  else if (e.source) src = `${e.source}${e.testInfo ? " — " + e.testInfo : ""}. `;
                   return (
                     <div key={ds} className="log-row">
                       <div className="log-date">{d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}</div>
                       <div className="log-body">
-                        <div className="log-skills">
-                          {e.skills.map((k) => (
-                            <span key={k} style={{ background: `var(--${k.toLowerCase()})` }}>
-                              {k}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="log-note">
-                          {src}
-                          {e.notes}
-                        </div>
+                        {state.logs[ds].map((e, idx) => {
+                          let src = "";
+                          if (e.source === "Cambridge Book" && e.bookNum) src = `Cambridge Book ${e.bookNum} — Test ${e.testNum}. `;
+                          else if (e.source) src = `${e.source}${e.testInfo ? " — " + e.testInfo : ""}. `;
+                          return (
+                            <div key={idx} style={{ marginBottom: idx < state.logs[ds].length - 1 ? 6 : 0 }}>
+                              <div className="log-skills">
+                                {e.skills.map((k) => (
+                                  <span key={k} style={{ background: `var(--${k.toLowerCase()})` }}>
+                                    {k}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="log-note">
+                                {src}
+                                {e.notes}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
                 })}
-              {Object.keys(state.logs).filter((ds) => state.logs[ds].done).length === 0 && (
+              {Object.keys(state.logs).filter((ds) => state.logs[ds]?.length).length === 0 && (
                 <div className="empty-state">Belum ada log. Klik tanggal di kalender untuk mulai.</div>
               )}
             </div>
@@ -454,13 +482,11 @@ export default function Home() {
       {openDate && (
         <DayPanel
           ds={openDate}
-          entry={state.logs[openDate]}
+          entries={state.logs[openDate] || []}
           onClose={() => setOpenDate(null)}
-          onSave={(entry) => {
-            updateLog(openDate, entry);
-            setOpenDate(null);
-          }}
-          onClear={() => {
+          onAdd={(entry) => addLogEntry(openDate, entry)}
+          onDeleteEntry={(idx) => deleteLogEntry(openDate, idx)}
+          onClearAll={() => {
             clearLog(openDate);
             setOpenDate(null);
           }}
@@ -472,36 +498,88 @@ export default function Home() {
 
 function DayPanel({
   ds,
-  entry,
+  entries,
   onClose,
-  onSave,
-  onClear,
+  onAdd,
+  onDeleteEntry,
+  onClearAll,
 }: {
   ds: string;
-  entry?: LogEntry;
+  entries: LogEntry[];
   onClose: () => void;
-  onSave: (e: LogEntry) => void;
-  onClear: () => void;
+  onAdd: (e: LogEntry) => void;
+  onDeleteEntry: (idx: number) => void;
+  onClearAll: () => void;
 }) {
   const d = new Date(ds + "T00:00:00");
-  const [skills, setSkills] = useState<Skill[]>(entry?.skills || []);
-  const [source, setSource] = useState(entry?.source || "");
-  const [bookNum, setBookNum] = useState(entry?.bookNum || String(BOOKS[0]));
-  const [testNum, setTestNum] = useState(entry?.testNum || "1");
-  const [testInfo, setTestInfo] = useState(entry?.testInfo || "");
-  const [notes, setNotes] = useState(entry?.notes || "");
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [source, setSource] = useState("");
+  const [bookNum, setBookNum] = useState(String(BOOKS[0]));
+  const [testNum, setTestNum] = useState("1");
+  const [testInfo, setTestInfo] = useState("");
+  const [notes, setNotes] = useState("");
 
   function toggleSkill(k: Skill) {
     setSkills((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+  }
+
+  function resetForm() {
+    setSkills([]);
+    setSource("");
+    setBookNum(String(BOOKS[0]));
+    setTestNum("1");
+    setTestInfo("");
+    setNotes("");
   }
 
   return (
     <div className="panel-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="panel">
         <div className="panel-title">{fmtLabel(d)}</div>
-        <div className="panel-sub">Catat sesi latihan hari ini</div>
+        <div className="panel-sub">{entries.length ? `${entries.length} sesi tercatat hari ini` : "Catat sesi latihan hari ini"}</div>
 
-        <label className="f">Skill</label>
+        {entries.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            {entries.map((e, idx) => {
+              let src = "";
+              if (e.source === "Cambridge Book" && e.bookNum) src = `Cambridge Book ${e.bookNum} — Test ${e.testNum}`;
+              else if (e.source) src = `${e.source}${e.testInfo ? " — " + e.testInfo : ""}`;
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    border: "1px solid var(--line)",
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 8,
+                  }}
+                >
+                  <div>
+                    <div className="log-skills" style={{ marginBottom: 4 }}>
+                      {e.skills.map((k) => (
+                        <span key={k} style={{ background: `var(--${k.toLowerCase()})` }}>
+                          {k}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="log-note">
+                      {src}
+                      {e.notes ? (src ? " — " : "") + e.notes : ""}
+                    </div>
+                  </div>
+                  <div className="btn danger" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => onDeleteEntry(idx)}>
+                    Hapus
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <label className="f">{entries.length ? "Tambah sesi lain" : "Skill"}</label>
         <div className="chip-row">
           {SKILLS.map((k) => (
             <div key={k} className={`chip ${skills.includes(k) ? "on " + k : ""}`} onClick={() => toggleSkill(k)}>
@@ -558,8 +636,9 @@ function DayPanel({
           </div>
           <div
             className="btn primary"
-            onClick={() =>
-              onSave({
+            onClick={() => {
+              if (!skills.length) return;
+              onAdd({
                 done: true,
                 skills,
                 source,
@@ -567,17 +646,20 @@ function DayPanel({
                 testNum: source === "Cambridge Book" ? testNum : undefined,
                 testInfo,
                 notes,
-              })
-            }
+              });
+              resetForm();
+            }}
           >
-            Simpan &amp; Tandai Selesai
+            {entries.length ? "Simpan sesi ini" : "Simpan & Tandai Selesai"}
           </div>
         </div>
-        <div style={{ marginTop: 8 }}>
-          <div className="btn danger" style={{ borderStyle: "dashed" }} onClick={onClear}>
-            Hapus log hari ini
+        {entries.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div className="btn danger" style={{ borderStyle: "dashed" }} onClick={onClearAll}>
+              Hapus semua log hari ini
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

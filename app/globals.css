@@ -94,7 +94,7 @@ body{color:var(--ink);font-family:'IBM Plex Sans',sans-serif;}
 .log-body{flex:1;}
 .log-skills{display:flex;gap:4px;margin-bottom:2px;}
 .log-skills span{font-size:9px;font-weight:700;color:#fff;border-radius:4px;padding:1px 5px;}
-.log-note{color:var(--ink-soft);}
+.log-note{color:var(--ink-soft);white-space:pre-line;}
 .empty-state{font-size:12.5px;color:var(--ink-soft);padding:14px 0;text-align:center;}
 
 .res-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}

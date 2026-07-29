@@ -200,6 +200,19 @@ export default function Home() {
     else delete nextLogs[ds];
     persist({ ...state, logs: nextLogs });
   }
+  function editLogEntry(ds: string, index: number, entry: LogEntry) {
+    const existing = state.logs[ds] || [];
+    const nextEntries = existing.map((e, i) => (i === index ? entry : e));
+    const next = { ...state, logs: { ...state.logs, [ds]: nextEntries } };
+    if (entry.source === "Cambridge Book" && entry.bookNum && entry.testNum) {
+      const bp = JSON.parse(JSON.stringify(next.bookProgress)) as BookProgress;
+      if (!bp[entry.bookNum]) bp[entry.bookNum] = {};
+      if (!bp[entry.bookNum][entry.testNum]) bp[entry.bookNum][entry.testNum] = { R: false, L: false, W: false, S: false };
+      entry.skills.forEach((k) => (bp[entry.bookNum!][entry.testNum!][k] = true));
+      next.bookProgress = bp;
+    }
+    persist(next);
+  }
   function clearLog(ds: string) {
     const nextLogs = { ...state.logs };
     delete nextLogs[ds];
@@ -355,11 +368,10 @@ export default function Home() {
             <div className="section-head">
               <div className="section-title serif">Log Terbaru</div>
             </div>
-            <div className="cal-card" style={{ padding: "6px 16px" }}>
+            <div className="cal-card" style={{ padding: "6px 16px", maxHeight: 420, overflowY: "auto" }}>
               {Object.keys(state.logs)
                 .filter((ds) => state.logs[ds]?.length)
                 .sort((a, b) => b.localeCompare(a))
-                .slice(0, 6)
                 .map((ds) => {
                   const d = new Date(ds + "T00:00:00");
                   return (
@@ -486,6 +498,7 @@ export default function Home() {
           onClose={() => setOpenDate(null)}
           onAdd={(entry) => addLogEntry(openDate, entry)}
           onDeleteEntry={(idx) => deleteLogEntry(openDate, idx)}
+          onEditEntry={(idx, entry) => editLogEntry(openDate, idx, entry)}
           onClearAll={() => {
             clearLog(openDate);
             setOpenDate(null);
@@ -502,6 +515,7 @@ function DayPanel({
   onClose,
   onAdd,
   onDeleteEntry,
+  onEditEntry,
   onClearAll,
 }: {
   ds: string;
@@ -509,6 +523,7 @@ function DayPanel({
   onClose: () => void;
   onAdd: (e: LogEntry) => void;
   onDeleteEntry: (idx: number) => void;
+  onEditEntry: (idx: number, e: LogEntry) => void;
   onClearAll: () => void;
 }) {
   const d = new Date(ds + "T00:00:00");
@@ -518,6 +533,7 @@ function DayPanel({
   const [testNum, setTestNum] = useState("1");
   const [testInfo, setTestInfo] = useState("");
   const [notes, setNotes] = useState("");
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   function toggleSkill(k: Skill) {
     setSkills((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
@@ -530,6 +546,17 @@ function DayPanel({
     setTestNum("1");
     setTestInfo("");
     setNotes("");
+    setEditingIndex(null);
+  }
+
+  function startEdit(idx: number, e: LogEntry) {
+    setEditingIndex(idx);
+    setSkills(e.skills);
+    setSource(e.source);
+    setBookNum(e.bookNum || String(BOOKS[0]));
+    setTestNum(e.testNum || "1");
+    setTestInfo(e.testInfo || "");
+    setNotes(e.notes || "");
   }
 
   return (
@@ -548,7 +575,8 @@ function DayPanel({
                 <div
                   key={idx}
                   style={{
-                    border: "1px solid var(--line)",
+                    border: editingIndex === idx ? "1px solid var(--ink)" : "1px solid var(--line)",
+                    background: editingIndex === idx ? "rgba(0,0,0,0.03)" : "transparent",
                     borderRadius: 8,
                     padding: "8px 10px",
                     display: "flex",
@@ -570,8 +598,13 @@ function DayPanel({
                       {e.notes ? (src ? " — " : "") + e.notes : ""}
                     </div>
                   </div>
-                  <div className="btn danger" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => onDeleteEntry(idx)}>
-                    Hapus
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                    <div className="btn ghost" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => startEdit(idx, e)}>
+                      Edit
+                    </div>
+                    <div className="btn danger" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => onDeleteEntry(idx)}>
+                      Hapus
+                    </div>
                   </div>
                 </div>
               );
@@ -579,7 +612,16 @@ function DayPanel({
           </div>
         )}
 
-        <label className="f">{entries.length ? "Tambah sesi lain" : "Skill"}</label>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <label className="f" style={{ margin: 0 }}>
+            {editingIndex !== null ? "Edit sesi" : entries.length ? "Tambah sesi lain" : "Skill"}
+          </label>
+          {editingIndex !== null && (
+            <div className="btn ghost" style={{ padding: "2px 8px", fontSize: 11 }} onClick={resetForm}>
+              Batal edit
+            </div>
+          )}
+        </div>
         <div className="chip-row">
           {SKILLS.map((k) => (
             <div key={k} className={`chip ${skills.includes(k) ? "on " + k : ""}`} onClick={() => toggleSkill(k)}>
@@ -638,7 +680,7 @@ function DayPanel({
             className="btn primary"
             onClick={() => {
               if (!skills.length) return;
-              onAdd({
+              const entry: LogEntry = {
                 done: true,
                 skills,
                 source,
@@ -646,11 +688,16 @@ function DayPanel({
                 testNum: source === "Cambridge Book" ? testNum : undefined,
                 testInfo,
                 notes,
-              });
+              };
+              if (editingIndex !== null) {
+                onEditEntry(editingIndex, entry);
+              } else {
+                onAdd(entry);
+              }
               resetForm();
             }}
           >
-            {entries.length ? "Simpan sesi ini" : "Simpan & Tandai Selesai"}
+            {editingIndex !== null ? "Simpan perubahan" : entries.length ? "Simpan sesi ini" : "Simpan & Tandai Selesai"}
           </div>
         </div>
         {entries.length > 0 && (

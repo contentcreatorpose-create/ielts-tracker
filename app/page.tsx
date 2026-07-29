@@ -355,12 +355,11 @@ export default function Home() {
             <div className="section-head">
               <div className="section-title serif">Log Terbaru</div>
             </div>
-            <div className="cal-card" style={{ padding: "6px 16px" }}>
-              {Object.keys(state.logs)
-                .filter((ds) => state.logs[ds]?.length)
-                .sort((a, b) => b.localeCompare(a))
-                .slice(0, 6)
-                .map((ds) => {
+           <div className="cal-card" style={{ padding: "6px 16px", maxHeight: 420, overflowY: "auto" }}>
+  {Object.keys(state.logs)
+    .filter((ds) => state.logs[ds]?.length)
+    .sort((a, b) => b.localeCompare(a))
+    .map((ds) => {
                   const d = new Date(ds + "T00:00:00");
                   return (
                     <div key={ds} className="log-row">
